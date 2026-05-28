@@ -184,6 +184,10 @@ textarea{resize:vertical;min-height:140px;line-height:1.6}
       <div class="pulse"></div>
       <span id="hdr-baseurl">http://localhost:3000</span>
     </div>
+    <div id="sync-badge" style="display:flex;align-items:center;gap:5px;font-size:11px;padding:4px 10px;border-radius:20px;background:var(--bg3);border:1px solid var(--border);color:var(--text3)" title="Sync status">
+      <span id="sync-dot" style="width:6px;height:6px;border-radius:50%;background:var(--text3);flex-shrink:0"></span>
+      <span id="sync-label">not synced</span>
+    </div>
     <button class="icon-btn" onclick="exportOpenAPI()" title="Export OpenAPI 3.0 JSON"><i class="ti ti-file-code"></i></button>
     <button class="icon-btn" onclick="exportHTML()" title="Export standalone HTML mock server"><i class="ti ti-download"></i></button>
     <button class="icon-btn" onclick="importSpec()" title="Import OpenAPI JSON"><i class="ti ti-upload"></i></button>
@@ -263,9 +267,30 @@ const newEP = (n=0) => ({
   notes: ''
 });
 
+// ─── SYNC TO SERVER ──────────────────────────────────────────────────────────
+async function syncToServer() {
+  const dot   = document.getElementById('sync-dot');
+  const label = document.getElementById('sync-label');
+  try {
+    const res = await fetch(state.baseUrl + '/__config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoints: state.endpoints })
+    });
+    if (res.ok) {
+      if (dot)   { dot.style.background = 'var(--accent)'; }
+      if (label) { label.style.color = 'var(--accent)'; label.textContent = state.endpoints.length + ' endpoints live'; }
+    } else { throw new Error('bad response'); }
+  } catch {
+    if (dot)   { dot.style.background = 'var(--text3)'; }
+    if (label) { label.style.color = 'var(--text3)'; label.textContent = 'server offline'; }
+  }
+}
+
 // ─── SAVE / LOAD ─────────────────────────────────────────────────────────────
 function save() {
   try { localStorage.setItem('apistudio_state', JSON.stringify(state)); } catch(e){}
+  syncToServer();
 }
 function load() {
   try {
@@ -944,6 +969,7 @@ function init(){
     state.selected=state.endpoints[0].id;
   }
   render();
+  syncToServer();
 }
 
 init();

@@ -1,61 +1,72 @@
-const express = require('express');
-const cors = require('cors');
-const jwt = require('jsonwebtoken');
 const jsonServer = require('json-server');
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const path = require('path');
 
-const app = express();
+const server = jsonServer.create();
+const router = jsonServer.router(path.join(__dirname, 'db.json'));
+const middlewares = jsonServer.defaults({ logger: true, noCors: false });
+
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'mock-api-secret-key';
 
-app.use(cors());
-app.use(express.json());
+// In-memory store for UI-configured endpoints
+let mockEndpoints = [];
 
-// Serve the API Studio frontend
-app.use(express.static(__dirname));
+server.use(middlewares);
+server.use(jsonServer.bodyParser);
 
-// ─── HEALTH / ENDPOINT LISTING ───────────────────────────────────────────────
-app.get('/health', (req, res) => {
+// ─── HEALTH ───────────────────────────────────────────────────────────────────
+server.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
+    configuredEndpoints: mockEndpoints.length,
     endpoints: [
-      { method: 'GET',    path: '/health',           description: 'List all endpoints' },
-      { method: 'GET',    path: '/users',             description: 'List users (supports ?page=1&limit=10)' },
-      { method: 'GET',    path: '/users/:id',         description: 'Get user by ID' },
-      { method: 'POST',   path: '/users',             description: 'Create user' },
-      { method: 'PUT',    path: '/users/:id',         description: 'Update user' },
-      { method: 'PATCH',  path: '/users/:id',         description: 'Partial update user' },
-      { method: 'DELETE', path: '/users/:id',         description: 'Delete user' },
-      { method: 'GET',    path: '/products',          description: 'List products' },
-      { method: 'POST',   path: '/products',          description: 'Create product' },
-      { method: 'DELETE', path: '/products/:id',      description: 'Delete product' },
-      { method: 'GET',    path: '/orders',            description: 'List orders' },
-      { method: 'POST',   path: '/orders',            description: 'Create order' },
-      { method: 'DELETE', path: '/orders/:id',        description: 'Delete order' },
-      { method: 'POST',   path: '/auth/login',        description: 'Returns mock JWT token' },
-      { method: 'POST',   path: '/auth/register',     description: 'Creates user, validates fields' },
-      { method: 'GET',    path: '/auth/me',           description: 'Returns user from Bearer token' },
+      { method: 'GET',    path: '/health' },
+      { method: 'POST',   path: '/__config',        description: 'Sync endpoints from UI' },
+      { method: 'GET',    path: '/__config',         description: 'Get current config' },
+      { method: 'GET',    path: '/users' },
+      { method: 'GET',    path: '/users/:id' },
+      { method: 'POST',   path: '/users' },
+      { method: 'PUT',    path: '/users/:id' },
+      { method: 'PATCH',  path: '/users/:id' },
+      { method: 'DELETE', path: '/users/:id' },
+      { method: 'GET',    path: '/products' },
+      { method: 'POST',   path: '/products' },
+      { method: 'DELETE', path: '/products/:id' },
+      { method: 'GET',    path: '/orders' },
+      { method: 'POST',   path: '/orders' },
+      { method: 'DELETE', path: '/orders/:id' },
+      { method: 'POST',   path: '/auth/login' },
+      { method: 'POST',   path: '/auth/register' },
+      { method: 'GET',    path: '/auth/me' },
     ]
   });
 });
 
-// ─── AUTH ROUTES ──────────────────────────────────────────────────────────────
-app.post('/auth/login', (req, res) => {
+// ─── CONFIG SYNC (called by UI) ───────────────────────────────────────────────
+server.post('/__config', (req, res) => {
+  mockEndpoints = req.body.endpoints || [];
+  console.log(`[config] synced ${mockEndpoints.length} endpoints from UI`);
+  res.json({ success: true, count: mockEndpoints.length });
+});
+
+server.get('/__config', (req, res) => {
+  res.json({ success: true, endpoints: mockEndpoints });
+});
+
+// ─── AUTH ─────────────────────────────────────────────────────────────────────
+server.post('/auth/login', (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ success: false, error: 'Email and password are required' });
   }
   const token = jwt.sign({ id: 1, email, role: 'user' }, JWT_SECRET, { expiresIn: '1h' });
-  res.json({
-    success: true,
-    token,
-    expiresIn: 3600,
-    user: { id: 1, email, role: 'user' }
-  });
+  res.json({ success: true, token, expiresIn: 3600, user: { id: 1, email, role: 'user' } });
 });
 
-app.post('/auth/register', (req, res) => {
+server.post('/auth/register', (req, res) => {
   const { name, email, password } = req.body;
   const errors = [];
   if (!name)     errors.push('name is required');
@@ -73,7 +84,7 @@ app.post('/auth/register', (req, res) => {
   });
 });
 
-app.get('/auth/me', (req, res) => {
+server.get('/auth/me', (req, res) => {
   const auth = req.headers.authorization;
   if (!auth || !auth.startsWith('Bearer ')) {
     return res.status(401).json({ success: false, error: 'Authorization header required' });
@@ -86,15 +97,66 @@ app.get('/auth/me', (req, res) => {
   }
 });
 
-// ─── JSON SERVER FOR CRUD ROUTES ──────────────────────────────────────────────
-const router = jsonServer.router(path.join(__dirname, 'db.json'));
-const middlewares = jsonServer.defaults({ logger: false, noCors: true });
+// ─── DYNAMIC MOCK HANDLER (UI-configured endpoints) ──────────────────────────
+function pathMatches(pattern, actual) {
+  const pp = pattern.split('/');
+  const ap = actual.split('/');
+  if (pp.length !== ap.length) return false;
+  return pp.every((seg, i) => seg.startsWith(':') || seg === ap[i]);
+}
 
-// Pagination support: ?page=1&limit=10
+function resolvePlaceholders(body) {
+  const names  = ['Alice Johnson', 'Bob Smith', 'Carol White', 'Dani Patel'];
+  const emails = ['alice@demo.io', 'bob@test.com', 'carol@example.net'];
+  const phones = ['+1-555-0172', '+44-20-7123-4567', '+91-98765-43210'];
+  return (body || '')
+    .replace(/\{\{timestamp\}\}/g, new Date().toISOString())
+    .replace(/\{\{uuid\}\}/g, crypto.randomUUID())
+    .replace(/\{\{faker\.name\}\}/g,  names[Math.floor(Math.random() * names.length)])
+    .replace(/\{\{faker\.email\}\}/g, emails[Math.floor(Math.random() * emails.length)])
+    .replace(/\{\{faker\.phone\}\}/g, phones[Math.floor(Math.random() * phones.length)])
+    .replace(/\{\{random\.int\}\}/g,  String(Math.floor(Math.random() * 1000)));
+}
+
+server.use((req, res, next) => {
+  // Skip internal routes
+  if (req.path.startsWith('/__config') || req.path.startsWith('/auth') || req.path === '/health') {
+    return next();
+  }
+
+  const match = mockEndpoints.find(ep => {
+    if (!ep.enabled) return false;
+    if (ep.method !== req.method) return false;
+    return pathMatches(ep.path, req.path);
+  });
+
+  if (!match) return next();
+
+  const scenario = match.activeScenario
+    ? match.scenarios?.find(s => s.id === match.activeScenario)
+    : null;
+
+  const statusCode = scenario ? scenario.statusCode : match.statusCode;
+  const rawBody    = scenario ? scenario.body : match.responseBody;
+  const body       = resolvePlaceholders(rawBody);
+
+  // Set configured headers
+  match.headers?.forEach(h => { if (h.key) res.setHeader(h.key, h.value); });
+
+  setTimeout(() => {
+    res.status(statusCode);
+    if ((match.contentType || '').includes('json')) {
+      try { res.json(JSON.parse(body)); }
+      catch { res.send(body); }
+    } else {
+      res.send(body);
+    }
+  }, match.delay || 0);
+});
+
+// ─── JSON-SERVER CRUD (fallback) ──────────────────────────────────────────────
 router.render = (req, res) => {
   const data = res.locals.data;
-  const total = Array.isArray(data) ? data.length : null;
-
   if (Array.isArray(data) && (req.query.page || req.query.limit)) {
     const limit = parseInt(req.query.limit) || 10;
     const page  = parseInt(req.query.page)  || 1;
@@ -102,18 +164,16 @@ router.render = (req, res) => {
     return res.json({
       success: true,
       data: data.slice(start, start + limit),
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) }
+      pagination: { page, limit, total: data.length, pages: Math.ceil(data.length / limit) }
     });
   }
-
-  res.json(Array.isArray(data) ? { success: true, data, total } : { success: true, data });
+  res.json(Array.isArray(data) ? { success: true, data, total: data.length } : { success: true, data });
 };
 
-app.use(middlewares);
-app.use(router);
+server.use(router);
 
-app.listen(PORT, () => {
-  console.log(`Mock API Server running at http://localhost:${PORT}`);
-  console.log(`Health check: http://localhost:${PORT}/health`);
-  console.log(`API Studio:   http://localhost:${PORT}/`);
+server.listen(PORT, () => {
+  console.log(`Mock API Server  →  http://localhost:${PORT}`);
+  console.log(`API Studio UI    →  http://localhost:${PORT}/index.html`);
+  console.log(`Health check     →  http://localhost:${PORT}/health`);
 });
