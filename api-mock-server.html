@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API Studio — Mock Server</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d0f14;--bg2:#12151c;--bg3:#181c25;--bg4:#1e2330;
+  --border:#2a3040;--border2:#3a4560;
+  --text:#e8eaf0;--text2:#9aa3b8;--text3:#5a6480;
+  --accent:#00d4a0;--accent2:#00b589;--accent-bg:rgba(0,212,160,0.08);--accent-border:rgba(0,212,160,0.25);
+  --red:#ff5f6d;--red-bg:rgba(255,95,109,0.1);
+  --yellow:#ffc947;--yellow-bg:rgba(255,201,71,0.1);
+  --blue:#4d9de0;--blue-bg:rgba(77,157,224,0.1);
+  --purple:#b06cff;--purple-bg:rgba(176,108,255,0.1);
+  --font-mono:'JetBrains Mono',monospace;
+  --font-display:'Syne',sans-serif;
+  --r:6px;--r2:10px;
+}
+body{font-family:var(--font-mono);background:var(--bg);color:var(--text);min-height:100vh;overflow:hidden}
+
+/* LAYOUT */
+.app{display:grid;grid-template-columns:280px 1fr;grid-template-rows:52px 1fr;height:100vh}
+.header{grid-column:1/-1;display:flex;align-items:center;padding:0 20px;gap:14px;background:var(--bg2);border-bottom:1px solid var(--border);z-index:10}
+.logo{font-family:var(--font-display);font-size:16px;font-weight:700;color:var(--accent);letter-spacing:-0.02em}
+.logo em{color:var(--text3);font-style:normal;font-weight:400;font-size:13px;margin-left:6px}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.server-badge{display:flex;align-items:center;gap:6px;background:var(--accent-bg);border:1px solid var(--accent-border);border-radius:20px;padding:4px 12px;font-size:11px;color:var(--accent);cursor:pointer}
+.server-badge:hover{background:rgba(0,212,160,0.15)}
+.pulse{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pulse 2s ease infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(.8)}}
+
+.sidebar{background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.sidebar-head{padding:14px 14px 10px;border-bottom:1px solid var(--border)}
+.sidebar-title{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:10px;font-family:var(--font-display)}
+.add-ep-btn{width:100%;padding:8px 12px;background:var(--accent);color:#000;border:none;border-radius:var(--r);font-family:var(--font-mono);font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s}
+.add-ep-btn:hover{background:var(--accent2)}
+.sidebar-search{margin-top:8px;position:relative}
+.sidebar-search input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:6px 10px 6px 30px;font-family:var(--font-mono);font-size:12px;color:var(--text);outline:none}
+.sidebar-search input:focus{border-color:var(--accent-border)}
+.sidebar-search i{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:14px;pointer-events:none}
+.ep-list{flex:1;overflow-y:auto;padding:8px}
+.ep-list::-webkit-scrollbar{width:4px}
+.ep-list::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.ep-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:var(--r);cursor:pointer;transition:background .1s;margin-bottom:2px}
+.ep-item:hover{background:var(--bg3)}
+.ep-item.active{background:var(--bg4);outline:1px solid var(--border2)}
+.ep-item.disabled{opacity:.45}
+.method-tag{font-size:9px;font-weight:600;padding:2px 6px;border-radius:3px;min-width:40px;text-align:center;letter-spacing:.04em}
+.GET{background:rgba(0,212,160,.15);color:var(--accent)}.POST{background:var(--blue-bg);color:var(--blue)}.PUT{background:var(--yellow-bg);color:var(--yellow)}.DELETE{background:var(--red-bg);color:var(--red)}.PATCH{background:var(--purple-bg);color:var(--purple)}
+.ep-path-text{flex:1;font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ep-dot{width:5px;height:5px;border-radius:50%;background:var(--accent);flex-shrink:0}
+
+/* MAIN */
+.main{overflow-y:auto;background:var(--bg)}
+.main::-webkit-scrollbar{width:5px}
+.main::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.main-inner{padding:20px;max-width:880px}
+
+/* CARD */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);margin-bottom:14px;overflow:hidden}
+.card-hdr{padding:11px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;font-size:12px;font-weight:500;color:var(--text2)}
+.card-hdr i{font-size:15px;color:var(--text3)}
+.card-body{padding:16px}
+
+/* FORM */
+.frow{display:grid;gap:10px;margin-bottom:12px}
+.frow-3{grid-template-columns:auto 1fr auto}
+.frow-2{grid-template-columns:1fr 1fr}
+.frow-4{grid-template-columns:1fr 1fr 1fr 1fr}
+label{font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--text3);display:block;margin-bottom:5px;font-family:var(--font-display)}
+input,select,textarea{width:100%;font-family:var(--font-mono);font-size:12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:7px 10px;color:var(--text);outline:none;transition:border-color .15s}
+input:focus,select:focus,textarea:focus{border-color:var(--accent-border);box-shadow:0 0 0 3px rgba(0,212,160,.06)}
+select option{background:var(--bg2)}
+textarea{resize:vertical;min-height:140px;line-height:1.6}
+
+/* TABS */
+.tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:14px}
+.tab-btn{padding:8px 14px;font-size:11px;font-family:var(--font-mono);cursor:pointer;color:var(--text3);border:none;background:none;border-bottom:2px solid transparent;transition:all .15s}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab-btn:hover:not(.active){color:var(--text)}
+.tab-count{font-size:9px;background:var(--border2);color:var(--text3);padding:1px 5px;border-radius:10px;margin-left:4px}
+
+/* BUTTONS */
+.btn{padding:7px 14px;font-size:12px;font-family:var(--font-mono);border-radius:var(--r);cursor:pointer;border:1px solid;transition:all .12s;font-weight:500}
+.btn-primary{background:var(--accent);color:#000;border-color:var(--accent)}
+.btn-primary:hover{background:var(--accent2);border-color:var(--accent2)}
+.btn-ghost{background:transparent;color:var(--text2);border-color:var(--border2)}
+.btn-ghost:hover{background:var(--bg3);color:var(--text)}
+.btn-danger{background:var(--red-bg);color:var(--red);border-color:rgba(255,95,109,.25)}
+.btn-danger:hover{background:rgba(255,95,109,.2)}
+.btn-sm{padding:5px 10px;font-size:11px}
+.icon-btn{padding:5px 7px;background:transparent;border:1px solid var(--border);border-radius:var(--r);cursor:pointer;color:var(--text3);display:flex;align-items:center;font-size:14px;transition:all .12s}
+.icon-btn:hover{background:var(--bg3);color:var(--text);border-color:var(--border2)}
+.icon-btn.danger:hover{color:var(--red);border-color:rgba(255,95,109,.4)}
+
+/* CHIPS */
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:10px;padding:3px 9px;border-radius:12px;cursor:pointer;transition:all .12s;border:1px solid}
+.chip-off{background:var(--bg3);color:var(--text3);border-color:var(--border)}
+.chip-off:hover{border-color:var(--border2);color:var(--text)}
+.chip-on{background:var(--accent-bg);color:var(--accent);border-color:var(--accent-border)}
+
+/* HEADER ROWS (headers/params table) */
+.hrow{display:grid;gap:8px;margin-bottom:6px;align-items:center}
+.hrow-kv{grid-template-columns:1fr 1fr auto}
+.hrow-param{grid-template-columns:1fr 80px 80px 60px auto}
+
+/* CODE / RESPONSE */
+.code-block{background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;font-size:12px;line-height:1.7;overflow-x:auto;position:relative}
+.code-block pre{margin:0;white-space:pre-wrap;word-break:break-word}
+.copy-overlay{position:absolute;top:8px;right:8px}
+
+/* TRY PANEL */
+.try-panel{background:var(--bg3);border-radius:var(--r2);padding:14px}
+.try-result{background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;font-size:11px;line-height:1.8;white-space:pre;overflow-x:auto;max-height:240px;overflow-y:auto;margin-top:12px}
+
+/* SCENARIO CARDS */
+.scenario-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px;margin-bottom:8px;position:relative}
+.scenario-card.active-scenario{border-color:var(--accent-border)}
+.scenario-active-badge{position:absolute;top:8px;right:8px;font-size:9px;background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent-border);padding:1px 7px;border-radius:10px}
+
+/* SCHEMA VIEWER */
+.schema-error{color:var(--red);font-size:11px;padding:8px 10px;background:var(--red-bg);border-radius:var(--r);margin-top:6px;border:1px solid rgba(255,95,109,.2)}
+
+/* URL BANNER */
+.url-banner{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg2);border:1px solid var(--accent-border);border-radius:var(--r2);margin-bottom:14px;font-size:12px}
+.url-banner .base{color:var(--accent)}.url-banner .path{color:var(--text)}
+.url-banner .method-label{font-size:10px;font-weight:600;padding:2px 7px;border-radius:3px}
+
+/* VALIDATION PILL */
+.v-pass{color:var(--accent)}.v-fail{color:var(--red)}.v-warn{color:var(--yellow)}
+
+/* MODAL */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(2px)}
+.modal{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);width:440px;max-height:90vh;overflow-y:auto}
+.modal-hdr{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:14px;font-weight:600;font-family:var(--font-display)}
+.modal-body{padding:18px}
+.modal-foot{padding:12px 18px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+
+/* TOAST */
+.toast{position:fixed;bottom:20px;right:20px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);padding:10px 16px;font-size:12px;z-index:9999;display:flex;align-items:center;gap:8px;animation:toast-in .2s ease;pointer-events:none;max-width:320px}
+@keyframes toast-in{from{transform:translateY(10px);opacity:0}to{transform:translateY(0);opacity:1}}
+.toast-ok{border-color:var(--accent-border);color:var(--accent)}.toast-err{border-color:rgba(255,95,109,.4);color:var(--red)}
+
+/* EMPTY */
+.empty{text-align:center;padding:80px 20px;color:var(--text3)}
+.empty i{font-size:44px;display:block;margin-bottom:14px;color:var(--border2)}
+.empty p{font-size:13px;margin-bottom:18px;color:var(--text2)}
+
+/* STATUS COLORS */
+.s2{color:var(--accent)}.s3{color:var(--blue)}.s4{color:var(--yellow)}.s5{color:var(--red)}
+
+/* HINT */
+.hint{font-size:10px;color:var(--text3);margin-top:5px}
+
+/* SCHEMA VALIDATOR RESULT */
+.sv-row{display:flex;align-items:flex-start;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:11px}
+.sv-row:last-child{border-bottom:none}
+.sv-field{color:var(--text2);min-width:120px}
+.sv-type{color:var(--text3);font-size:10px}
+.sv-ok{color:var(--accent)}.sv-bad{color:var(--red)}
+
+/* TABS PANEL hide/show */
+.tab-panel{display:none}.tab-panel.show{display:block}
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+
+<!-- HEADER -->
+<div class="header">
+  <div class="logo">API Studio <em>mock server</em></div>
+  <div style="display:flex;gap:6px;margin-left:10px">
+    <span style="font-size:10px;color:var(--text3)">v2.0</span>
+  </div>
+  <div class="header-right">
+    <div class="server-badge" onclick="showConfigModal()" title="Click to change base URL">
+      <div class="pulse"></div>
+      <span id="hdr-baseurl">http://localhost:3000</span>
+    </div>
+    <button class="icon-btn" onclick="exportOpenAPI()" title="Export OpenAPI 3.0 JSON"><i class="ti ti-file-code"></i></button>
+    <button class="icon-btn" onclick="exportHTML()" title="Export standalone HTML mock server"><i class="ti ti-download"></i></button>
+    <button class="icon-btn" onclick="importSpec()" title="Import OpenAPI JSON"><i class="ti ti-upload"></i></button>
+    <button class="icon-btn" onclick="shareLink()" title="Share via URL (state encoded)"><i class="ti ti-share"></i></button>
+    <button class="icon-btn" onclick="showHelpModal()" title="Help"><i class="ti ti-help-circle"></i></button>
+  </div>
+</div>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="sidebar-head">
+    <div class="sidebar-title">Endpoints</div>
+    <button class="add-ep-btn" onclick="addEndpoint()"><i class="ti ti-plus" style="font-size:14px"></i> New Endpoint</button>
+    <div class="sidebar-search">
+      <i class="ti ti-search"></i>
+      <input id="ep-search" placeholder="Filter endpoints..." oninput="renderSidebar()">
+    </div>
+  </div>
+  <div class="ep-list" id="ep-list"></div>
+  <div style="padding:10px 12px;border-top:1px solid var(--border);font-size:10px;color:var(--text3);display:flex;justify-content:space-between">
+    <span id="ep-count">0 endpoints</span>
+    <button style="background:none;border:none;color:var(--text3);font-size:10px;cursor:pointer;font-family:var(--font-mono)" onclick="clearAll()">Clear all</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main" id="main">
+  <div class="main-inner" id="main-inner">
+    <div class="empty" id="empty-state">
+      <i class="ti ti-api-app"></i>
+      <p>No endpoints yet.<br>Create one to start building your mock API.</p>
+      <button class="btn btn-primary" onclick="addEndpoint()">+ Add first endpoint</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- /app -->
+
+<div id="modal-root"></div>
+<div id="toast-root"></div>
+<input type="file" id="import-file" accept=".json" style="display:none" onchange="handleImport(event)">
+
+<script>
+const METHODS = ['GET','POST','PUT','PATCH','DELETE','HEAD','OPTIONS'];
+const STATUS_TEXTS = {200:'OK',201:'Created',202:'Accepted',204:'No Content',301:'Moved Permanently',302:'Found',400:'Bad Request',401:'Unauthorized',403:'Forbidden',404:'Not Found',405:'Method Not Allowed',409:'Conflict',422:'Unprocessable Entity',429:'Too Many Requests',500:'Internal Server Error',502:'Bad Gateway',503:'Service Unavailable'};
+const CONTENT_TYPES = ['application/json','text/plain','text/html','application/xml','application/x-www-form-urlencoded'];
+
+let state = {
+  baseUrl: 'http://localhost:3000',
+  endpoints: [],
+  selected: null,
+  tab: 'response'
+};
+
+// ─── DEFAULT ENDPOINT ───────────────────────────────────────────────────────
+const newEP = (n=0) => ({
+  id: crypto.randomUUID(),
+  method: 'GET',
+  path: '/api/resource' + (n ? '-'+n : ''),
+  description: '',
+  tags: [],
+  enabled: true,
+  authRequired: false,
+  delay: 0,
+  statusCode: 200,
+  contentType: 'application/json',
+  responseBody: JSON.stringify({success:true,message:"Hello from Mock API",data:[],timestamp:"{{timestamp}}"},null,2),
+  headers: [
+    {key:'Content-Type',value:'application/json'},
+    {key:'Access-Control-Allow-Origin',value:'*'},
+    {key:'X-Powered-By',value:'API Studio'}
+  ],
+  params: [],
+  scenarios: [],
+  activeScenario: null,
+  requestSchema: '',
+  notes: ''
+});
+
+// ─── SAVE / LOAD ─────────────────────────────────────────────────────────────
+function save() {
+  try { localStorage.setItem('apistudio_state', JSON.stringify(state)); } catch(e){}
+}
+function load() {
+  try {
+    const s = localStorage.getItem('apistudio_state');
+    if (s) { state = {...state, ...JSON.parse(s)}; return true; }
+  } catch(e){}
+  return false;
+}
+
+// ─── RENDER ──────────────────────────────────────────────────────────────────
+function render() { renderSidebar(); renderMain(); save(); }
+
+function renderSidebar() {
+  const query = (document.getElementById('ep-search')?.value || '').toLowerCase();
+  const list = document.getElementById('ep-list');
+  const filtered = state.endpoints.filter(ep =>
+    ep.path.toLowerCase().includes(query) ||
+    ep.method.toLowerCase().includes(query) ||
+    (ep.description||'').toLowerCase().includes(query)
+  );
+  document.getElementById('ep-count').textContent = `${state.endpoints.length} endpoint${state.endpoints.length!==1?'s':''}`;
+  list.innerHTML = filtered.length === 0
+    ? `<div style="padding:16px;text-align:center;font-size:11px;color:var(--text3)">No endpoints found</div>`
+    : filtered.map(ep => `
+      <div class="ep-item ${ep.id===state.selected?'active':''} ${!ep.enabled?'disabled':''}"
+           onclick="selectEP('${ep.id}')">
+        <span class="method-tag ${ep.method}">${ep.method}</span>
+        <span class="ep-path-text" title="${ep.path}">${ep.path}</span>
+        ${ep.enabled?'<span class="ep-dot"></span>':'<i class="ti ti-eye-off" style="font-size:11px;color:var(--text3)"></i>'}
+      </div>
+    `).join('');
+}
+
+function renderMain() {
+  const ep = state.endpoints.find(e => e.id === state.selected);
+  const m = document.getElementById('main-inner');
+  if (!ep) {
+    m.innerHTML = `<div class="empty"><i class="ti ti-api-app"></i><p>Select an endpoint or create a new one.</p><button class="btn btn-primary" onclick="addEndpoint()">+ New endpoint</button></div>`;
+    return;
+  }
+  const sClass = ep.statusCode<300?'s2':ep.statusCode<400?'s3':ep.statusCode<500?'s4':'s5';
+  const activeScenario = ep.scenarios?.find(s=>s.id===ep.activeScenario);
+
+  m.innerHTML = `
+  <div class="url-banner">
+    <span class="method-label ${ep.method}">${ep.method}</span>
+    <span class="base">${state.baseUrl}</span><span class="path">${ep.path}</span>
+    <div style="margin-left:auto;display:flex;gap:6px">
+      <span class="chip ${ep.enabled?'chip-on':'chip-off'}" onclick="toggleField('enabled')">${ep.enabled?'● Active':'○ Off'}</span>
+      <span class="chip ${ep.authRequired?'chip-on':'chip-off'}" onclick="toggleField('authRequired')"><i class="ti ti-lock" style="font-size:10px"></i> Auth</span>
+      ${ep.tags.map(t=>`<span class="chip chip-on" style="font-size:9px">${t}</span>`).join('')}
+    </div>
+  </div>
+
+  <!-- DEFINITION CARD -->
+  <div class="card">
+    <div class="card-hdr"><i class="ti ti-route"></i> Endpoint Definition</div>
+    <div class="card-body">
+      <div class="frow frow-3">
+        <div>
+          <label>Method</label>
+          <select style="width:95px" onchange="updateEP('method',this.value)">
+            ${METHODS.map(m=>`<option ${ep.method===m?'selected':''}>${m}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label>Path</label>
+          <input value="${esc(ep.path)}" oninput="updateEP('path',this.value)" placeholder="/api/users/:id">
+        </div>
+        <div>
+          <label>Status</label>
+          <select style="width:90px" onchange="updateEP('statusCode',parseInt(this.value))">
+            ${Object.keys(STATUS_TEXTS).map(s=>`<option ${ep.statusCode==s?'selected':''}>${s}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="frow frow-2">
+        <div>
+          <label>Description</label>
+          <input value="${esc(ep.description)}" oninput="updateEP('description',this.value)" placeholder="What does this do?">
+        </div>
+        <div>
+          <label>Tags (comma-separated)</label>
+          <input value="${esc(ep.tags.join(','))}" oninput="updateEP('tags',this.value.split(',').map(t=>t.trim()).filter(Boolean))" placeholder="users, auth, v1">
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:16px">
+        <div style="flex:1">
+          <label>Response Delay</label>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="range" min="0" max="5000" step="100" value="${ep.delay}" style="flex:1" oninput="updateEP('delay',parseInt(this.value));document.getElementById('delay-out').textContent=this.value+'ms'">
+            <span id="delay-out" style="font-size:12px;color:var(--text2);min-width:44px">${ep.delay}ms</span>
+          </div>
+        </div>
+        <div>
+          <label>Content-Type</label>
+          <select style="width:200px" onchange="updateEP('contentType',this.value)">
+            ${CONTENT_TYPES.map(ct=>`<option ${ep.contentType===ct?'selected':''}>${ct}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESPONSE TABS CARD -->
+  <div class="card">
+    <div class="card-hdr"><i class="ti ti-code"></i> Response Configuration</div>
+    <div class="card-body">
+      <div class="tabs">
+        ${['response','scenarios','headers','params','schema','notes'].map(t=>`
+          <button class="tab-btn ${state.tab===t?'active':''}" onclick="setTab('${t}')">
+            ${t==='headers'?'Headers<span class="tab-count">'+ep.headers.length+'</span>':
+              t==='params'?'Params<span class="tab-count">'+ep.params.length+'</span>':
+              t==='scenarios'?'Scenarios<span class="tab-count">'+ep.scenarios.length+'</span>':
+              t.charAt(0).toUpperCase()+t.slice(1)}
+          </button>
+        `).join('')}
+      </div>
+      <div id="tab-content">${renderTab(ep)}</div>
+    </div>
+  </div>
+
+  <!-- TRY IT CARD -->
+  <div class="card">
+    <div class="card-hdr"><i class="ti ti-send"></i> Try It Out</div>
+    <div class="card-body">
+      <div class="try-panel">
+        <div class="frow frow-2" style="margin-bottom:10px">
+          <div>
+            <label>Override URL</label>
+            <input id="try-url" placeholder="${state.baseUrl}${ep.path}">
+          </div>
+          <div>
+            <label>Authorization</label>
+            <input id="try-auth" placeholder="Bearer eyJhbGciOiJIUzI1NiJ9..." type="password">
+          </div>
+        </div>
+        ${['POST','PUT','PATCH'].includes(ep.method)?`
+        <div style="margin-bottom:10px">
+          <label>Request Body (JSON)</label>
+          <textarea id="try-body" style="min-height:80px" placeholder='{"field": "value"}'></textarea>
+        </div>
+        `:''}
+        <div id="query-params-area" style="margin-bottom:10px">
+          <label>Query Params</label>
+          <div id="try-qp-rows"></div>
+          <button class="btn btn-ghost btn-sm" onclick="addTryQP()" style="margin-top:4px"><i class="ti ti-plus" style="font-size:11px"></i> Add param</button>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="tryEndpoint()"><i class="ti ti-player-play" style="font-size:12px;vertical-align:-1px"></i> Send</button>
+          <button class="btn btn-ghost btn-sm" onclick="copySnippet('curl')">cURL</button>
+          <button class="btn btn-ghost btn-sm" onclick="copySnippet('fetch')">fetch</button>
+          <button class="btn btn-ghost btn-sm" onclick="copySnippet('axios')">axios</button>
+          <button class="btn btn-ghost btn-sm" onclick="copySnippet('python')">Python</button>
+          <button class="btn btn-ghost btn-sm" onclick="copySnippet('php')">PHP</button>
+        </div>
+        <div id="try-result"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ACTIONS -->
+  <div class="card">
+    <div style="padding:12px 14px;display:flex;gap:8px">
+      <button class="btn btn-ghost btn-sm" onclick="duplicateEP('${ep.id}')"><i class="ti ti-copy" style="font-size:11px"></i> Duplicate</button>
+      <button class="btn btn-ghost btn-sm" onclick="moveEP('${ep.id}',-1)"><i class="ti ti-arrow-up" style="font-size:11px"></i> Up</button>
+      <button class="btn btn-ghost btn-sm" onclick="moveEP('${ep.id}',1)"><i class="ti ti-arrow-down" style="font-size:11px"></i> Down</button>
+      <button class="btn btn-danger btn-sm" style="margin-left:auto" onclick="deleteEP('${ep.id}')"><i class="ti ti-trash" style="font-size:11px"></i> Delete</button>
+    </div>
+  </div>
+  `;
+  initTryQP();
+}
+
+function renderTab(ep) {
+  const t = state.tab;
+  if (t === 'response') return `
+    <div>
+      <label>Response Body</label>
+      <textarea oninput="updateEP('responseBody',this.value)">${esc(ep.responseBody)}</textarea>
+      <div class="hint">Dynamic: <code>{{timestamp}}</code> <code>{{uuid}}</code> <code>{{faker.name}}</code> <code>{{faker.email}}</code> <code>{{faker.phone}}</code> <code>{{random.int}}</code></div>
+    </div>
+    <div style="margin-top:12px">
+      <label>Preview (rendered)</label>
+      <div class="code-block"><pre id="body-preview">${syntaxHL(resolveFakers(ep.responseBody))}</pre><div class="copy-overlay"><button class="icon-btn" onclick="copyText(${JSON.stringify(ep.responseBody)})" title="Copy"><i class="ti ti-copy" style="font-size:12px"></i></button></div></div>
+    </div>
+  `;
+  if (t === 'scenarios') return `
+    <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
+      <span style="font-size:11px;color:var(--text2)">Scenarios let you switch between different response states without editing the main body.</span>
+      <button class="btn btn-ghost btn-sm" onclick="addScenario()" style="margin-left:auto;flex-shrink:0"><i class="ti ti-plus" style="font-size:11px"></i> Add scenario</button>
+    </div>
+    <div class="scenario-card ${!ep.activeScenario?'active-scenario':''}">
+      ${!ep.activeScenario?'<div class="scenario-active-badge">● Active</div>':''}
+      <div style="font-size:12px;font-weight:500;color:var(--text)">Default response</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px">Status ${ep.statusCode} — ${esc(ep.responseBody.substring(0,60))}${ep.responseBody.length>60?'...':''}</div>
+      ${ep.activeScenario?`<button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="activateScenario(null)">Use this</button>`:''}
+    </div>
+    ${ep.scenarios.map((s,i)=>`
+      <div class="scenario-card ${s.id===ep.activeScenario?'active-scenario':''}">
+        ${s.id===ep.activeScenario?'<div class="scenario-active-badge">● Active</div>':''}
+        <div style="display:flex;align-items:center;gap:8px">
+          <input value="${esc(s.name)}" oninput="updateScenario(${i},'name',this.value)" style="font-size:12px;font-weight:500;background:transparent;border:none;border-bottom:1px solid var(--border);border-radius:0;padding:2px 4px;width:180px" placeholder="Scenario name">
+          <select style="width:80px" onchange="updateScenario(${i},'statusCode',parseInt(this.value))">
+            ${Object.keys(STATUS_TEXTS).map(s2=>`<option ${s.statusCode==s2?'selected':''}>${s2}</option>`).join('')}
+          </select>
+          <div style="margin-left:auto;display:flex;gap:4px">
+            ${s.id!==ep.activeScenario?`<button class="btn btn-ghost btn-sm" onclick="activateScenario('${s.id}')">Use</button>`:''}
+            <button class="icon-btn danger" onclick="deleteScenario(${i})"><i class="ti ti-trash" style="font-size:12px"></i></button>
+          </div>
+        </div>
+        <textarea oninput="updateScenario(${i},'body',this.value)" style="margin-top:8px;min-height:70px">${esc(s.body)}</textarea>
+      </div>
+    `).join('')}
+  `;
+  if (t === 'headers') return `
+    <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:6px;margin-bottom:4px">
+      <div style="font-size:10px;color:var(--text3);padding:0 4px;text-transform:uppercase;letter-spacing:.05em">Key</div>
+      <div style="font-size:10px;color:var(--text3);padding:0 4px;text-transform:uppercase;letter-spacing:.05em">Value</div>
+      <div></div>
+    </div>
+    ${ep.headers.map((h,i)=>`
+      <div class="hrow hrow-kv" style="margin-bottom:6px">
+        <input value="${esc(h.key)}" placeholder="Header-Name" oninput="updateHeader(${i},'key',this.value)">
+        <input value="${esc(h.value)}" placeholder="value" oninput="updateHeader(${i},'value',this.value)">
+        <button class="icon-btn danger" onclick="removeHeader(${i})"><i class="ti ti-x" style="font-size:12px"></i></button>
+      </div>
+    `).join('')}
+    <button class="btn btn-ghost btn-sm" onclick="addHeader()"><i class="ti ti-plus" style="font-size:11px"></i> Add header</button>
+  `;
+  if (t === 'params') return `
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr>
+        ${['Name','In','Type','Default','Required',''].map(h=>`<th style="text-align:left;padding:4px 8px;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)">${h}</th>`).join('')}
+      </tr></thead>
+      <tbody>${ep.params.map((p,i)=>`
+        <tr>
+          <td style="padding:6px 4px"><input value="${esc(p.name)}" oninput="updateParam(${i},'name',this.value)" placeholder="paramName"></td>
+          <td style="padding:6px 4px"><select onchange="updateParam(${i},'in',this.value)">${['path','query','body','header'].map(v=>`<option ${p.in===v?'selected':''}>${v}</option>`).join('')}</select></td>
+          <td style="padding:6px 4px"><select onchange="updateParam(${i},'type',this.value)">${['string','number','integer','boolean','array','object'].map(v=>`<option ${p.type===v?'selected':''}>${v}</option>`).join('')}</select></td>
+          <td style="padding:6px 4px"><input value="${esc(p.default||'')}" oninput="updateParam(${i},'default',this.value)" placeholder="default"></td>
+          <td style="padding:6px 4px;text-align:center"><input type="checkbox" ${p.required?'checked':''} onchange="updateParam(${i},'required',this.checked)"></td>
+          <td style="padding:6px 4px"><button class="icon-btn danger" onclick="removeParam(${i})"><i class="ti ti-x" style="font-size:12px"></i></button></td>
+        </tr>
+      `).join('')}</tbody>
+    </table>
+    <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="addParam()"><i class="ti ti-plus" style="font-size:11px"></i> Add parameter</button>
+  `;
+  if (t === 'schema') return `
+    <div style="margin-bottom:12px">
+      <label>Request Body JSON Schema (for validation in Try It)</label>
+      <textarea oninput="updateEP('requestSchema',this.value);validateSchema()" style="min-height:120px" placeholder='{"type":"object","required":["email"],"properties":{"email":{"type":"string","format":"email"}}}'>${esc(ep.requestSchema||'')}</textarea>
+      <div id="schema-result" style="margin-top:6px"></div>
+      <div class="hint">Paste a JSON Schema. When you send a request in Try It, the body will be validated against this schema.</div>
+    </div>
+  `;
+  if (t === 'notes') return `
+    <div>
+      <label>Internal Notes (Markdown supported)</label>
+      <textarea oninput="updateEP('notes',this.value)" style="min-height:140px" placeholder="# Usage notes&#10;&#10;Document edge cases, auth requirements, example payloads...">${esc(ep.notes||'')}</textarea>
+    </div>
+    ${ep.notes ? `<div style="margin-top:12px"><label>Preview</label><div class="code-block" style="color:var(--text2);font-family:var(--font-display)">${renderMarkdown(ep.notes)}</div></div>` : ''}
+  `;
+  return '';
+}
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+function esc(s=''){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+
+function syntaxHL(str) {
+  try {
+    return JSON.stringify(JSON.parse(str),null,2)
+      .replace(/("[\w\s-]+")\s*:/g,'<span style="color:var(--blue)">$1</span>:')
+      .replace(/:\s*("(?:[^"\\]|\\.)*")/g,(_,v)=>`: <span style="color:var(--accent)">${v}</span>`)
+      .replace(/:\s*(true|false|null)/g,(_,v)=>`: <span style="color:var(--yellow)">${v}</span>`)
+      .replace(/:\s*(-?\d+\.?\d*)/g,(_,v)=>`: <span style="color:var(--purple)">${v}</span>`);
+  } catch { return esc(str); }
+}
+
+function resolveFakers(body) {
+  const names = ['Alice Johnson','Bob Smith','Carol White','Dani Patel','Eve Zhang'];
+  const emails = ['alice@demo.io','bob@test.com','carol@example.net'];
+  const phones = ['+1-555-0172','+44-20-7123-4567','+91-98765-43210'];
+  return body
+    .replace(/\{\{timestamp\}\}/g, new Date().toISOString())
+    .replace(/\{\{uuid\}\}/g, crypto.randomUUID())
+    .replace(/\{\{faker\.name\}\}/g, names[Math.floor(Math.random()*names.length)])
+    .replace(/\{\{faker\.email\}\}/g, emails[Math.floor(Math.random()*emails.length)])
+    .replace(/\{\{faker\.phone\}\}/g, phones[Math.floor(Math.random()*phones.length)])
+    .replace(/\{\{random\.int\}\}/g, String(Math.floor(Math.random()*1000)));
+}
+
+function renderMarkdown(md) {
+  return md
+    .replace(/^# (.*)/gm,'<h2 style="font-size:16px;margin:10px 0 6px;color:var(--text)">$1</h2>')
+    .replace(/^## (.*)/gm,'<h3 style="font-size:14px;margin:8px 0 4px;color:var(--text2)">$1</h3>')
+    .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
+    .replace(/`(.*?)`/g,'<code style="background:var(--bg3);padding:1px 5px;border-radius:3px;font-size:11px">$1</code>')
+    .replace(/\n/g,'<br>');
+}
+
+function validateSchema() {
+  const ep = getEP();
+  const r = document.getElementById('schema-result');
+  if (!r) return;
+  if (!ep.requestSchema?.trim()) { r.innerHTML=''; return; }
+  try { JSON.parse(ep.requestSchema); r.innerHTML='<span class="v-pass">✓ Valid JSON Schema</span>'; }
+  catch(e) { r.innerHTML=`<div class="schema-error">✗ Invalid JSON: ${esc(e.message)}</div>`; }
+}
+
+function getStatusText(code){return STATUS_TEXTS[code]||''}
+
+// ─── STATE MUTATIONS ──────────────────────────────────────────────────────────
+function getEP(){return state.endpoints.find(e=>e.id===state.selected)}
+
+function addEndpoint(){
+  const ep = newEP(state.endpoints.length);
+  state.endpoints.push(ep);
+  state.selected = ep.id;
+  state.tab = 'response';
+  render();
+  toast('Endpoint created','ti-check');
+}
+
+function selectEP(id){state.selected=id;state.tab='response';render()}
+function deleteEP(id){
+  state.endpoints=state.endpoints.filter(e=>e.id!==id);
+  state.selected=state.endpoints.length?state.endpoints[state.endpoints.length-1].id:null;
+  render();toast('Deleted','ti-trash');
+}
+function duplicateEP(id){
+  const ep=getEP();const dup={...JSON.parse(JSON.stringify(ep)),id:crypto.randomUUID(),path:ep.path+'-copy'};
+  state.endpoints.push(dup);state.selected=dup.id;render();toast('Duplicated','ti-copy');
+}
+function moveEP(id,dir){
+  const i=state.endpoints.findIndex(e=>e.id===id);
+  const j=i+dir;if(j<0||j>=state.endpoints.length)return;
+  [state.endpoints[i],state.endpoints[j]]=[state.endpoints[j],state.endpoints[i]];render();
+}
+function clearAll(){if(confirm('Delete all endpoints?')){state.endpoints=[];state.selected=null;render();}}
+
+function toggleField(field){const ep=getEP();if(ep){ep[field]=!ep[field];render();}}
+
+function updateEP(field,value){
+  const ep=getEP();if(!ep)return;
+  ep[field]=value;
+  if(field==='path'){const b=document.querySelector('.url-banner .path');if(b)b.textContent=value;}
+  if(field==='responseBody'){const p=document.getElementById('body-preview');if(p)p.innerHTML=syntaxHL(resolveFakers(value));}
+  renderSidebar();save();
+}
+
+function setTab(t){state.tab=t;const ep=getEP();if(!ep)return;document.getElementById('tab-content').innerHTML=renderTab(ep);}
+
+function addHeader(){const ep=getEP();ep.headers.push({key:'',value:''});setTab('headers');}
+function removeHeader(i){const ep=getEP();ep.headers.splice(i,1);save();setTab('headers');}
+function updateHeader(i,f,v){const ep=getEP();ep.headers[i][f]=v;save();}
+
+function addParam(){const ep=getEP();ep.params.push({name:'',in:'query',type:'string',required:false,default:''});setTab('params');}
+function removeParam(i){const ep=getEP();ep.params.splice(i,1);save();setTab('params');}
+function updateParam(i,f,v){const ep=getEP();ep.params[i][f]=v;save();}
+
+function addScenario(){
+  const ep=getEP();
+  ep.scenarios.push({id:crypto.randomUUID(),name:'New Scenario',statusCode:200,body:JSON.stringify({success:false,error:"Not found"},null,2)});
+  setTab('scenarios');save();
+}
+function deleteScenario(i){const ep=getEP();ep.scenarios.splice(i,1);save();setTab('scenarios');}
+function updateScenario(i,f,v){const ep=getEP();ep.scenarios[i][f]=v;save();}
+function activateScenario(id){const ep=getEP();ep.activeScenario=id;render();toast(id?'Scenario activated':'Default response active','ti-check');}
+
+// ─── TRY IT ───────────────────────────────────────────────────────────────────
+let tryQPs = [{k:'',v:''}];
+function initTryQP(){renderTryQP();}
+function renderTryQP(){
+  const c=document.getElementById('try-qp-rows');if(!c)return;
+  c.innerHTML=tryQPs.map((qp,i)=>`
+    <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:6px;margin-bottom:4px">
+      <input value="${esc(qp.k)}" placeholder="key" oninput="tryQPs[${i}].k=this.value">
+      <input value="${esc(qp.v)}" placeholder="value" oninput="tryQPs[${i}].v=this.value">
+      <button class="icon-btn danger" onclick="removeTryQP(${i})"><i class="ti ti-x" style="font-size:12px"></i></button>
+    </div>
+  `).join('');
+}
+function addTryQP(){tryQPs.push({k:'',v:''});renderTryQP();}
+function removeTryQP(i){tryQPs.splice(i,1);renderTryQP();}
+
+function tryEndpoint(){
+  const ep=getEP();
+  const overrideUrl=document.getElementById('try-url')?.value;
+  const authToken=document.getElementById('try-auth')?.value;
+  const bodyInput=document.getElementById('try-body')?.value;
+  const qpStr=tryQPs.filter(q=>q.k).map(q=>`${encodeURIComponent(q.k)}=${encodeURIComponent(q.v)}`).join('&');
+
+  let url=overrideUrl||(state.baseUrl+ep.path);
+  if(qpStr)url+=(url.includes('?')?'&':'?')+qpStr;
+
+  const resultDiv=document.getElementById('try-result');
+  resultDiv.style.display='block';
+  resultDiv.className='try-result';
+  resultDiv.innerHTML='<span style="color:var(--text3)">⏳ Sending...</span>';
+
+  // Schema validation
+  if(ep.requestSchema&&bodyInput){
+    try{
+      const schema=JSON.parse(ep.requestSchema);
+      const body=JSON.parse(bodyInput);
+      const errs=validateAgainstSchema(body,schema);
+      if(errs.length){
+        resultDiv.innerHTML=`<span class="s4">⚠ Schema Validation Failed</span>\n${errs.map(e=>`  ✗ ${e}`).join('\n')}`;
+        return;
+      }
+    }catch(e){}
+  }
+
+  // Determine response
+  const active=ep.scenarios?.find(s=>s.id===ep.activeScenario);
+  const statusCode=active?active.statusCode:ep.statusCode;
+  let responseBody=active?active.body:ep.responseBody;
+  responseBody=resolveFakers(responseBody);
+
+  const headers=ep.headers.reduce((a,h)=>{if(h.key)a[h.key]=h.value;return a;},{});
+  if(authToken)headers['Authorization']=authToken;
+
+  setTimeout(()=>{
+    const sClass=statusCode<300?'s2':statusCode<400?'s3':statusCode<500?'s4':'s5';
+    resultDiv.innerHTML=`<span class="${sClass}">HTTP ${statusCode} ${getStatusText(statusCode)}</span> <span style="color:var(--text3)">[${ep.delay}ms delay]</span>
+<span style="color:var(--text3)">→ ${url}</span>
+
+<span style="color:var(--text2)">Response Headers:</span>
+${Object.entries(headers).map(([k,v])=>`  ${k}: ${v}`).join('\n')}
+
+<span style="color:var(--text2)">Response Body:</span>
+${responseBody}
+${active?`\n<span style="color:var(--yellow)">⚡ Scenario: ${active.name}</span>`:''}`
+  },ep.delay||0);
+}
+
+function validateAgainstSchema(data,schema){
+  const errs=[];
+  if(schema.required){schema.required.forEach(k=>{if(!(k in data))errs.push(`Missing required field: "${k}"`);});}
+  if(schema.properties){Object.entries(schema.properties).forEach(([k,def])=>{
+    if(k in data){
+      const t=def.type;const v=data[k];
+      if(t==='string'&&typeof v!=='string')errs.push(`"${k}" must be string, got ${typeof v}`);
+      if(t==='number'&&typeof v!=='number')errs.push(`"${k}" must be number`);
+      if(t==='integer'&&(!Number.isInteger(v)))errs.push(`"${k}" must be integer`);
+      if(t==='boolean'&&typeof v!=='boolean')errs.push(`"${k}" must be boolean`);
+      if(t==='array'&&!Array.isArray(v))errs.push(`"${k}" must be array`);
+      if(t==='object'&&(typeof v!=='object'||Array.isArray(v)))errs.push(`"${k}" must be object`);
+    }
+  });}
+  return errs;
+}
+
+// ─── CODE SNIPPETS ────────────────────────────────────────────────────────────
+function copySnippet(type){
+  const ep=getEP();
+  const url=state.baseUrl+ep.path;
+  const hdrs=ep.headers.reduce((a,h)=>{if(h.key)a[h.key]=h.value;return a;},{});
+  let s='';
+  if(type==='curl'){
+    const hStr=Object.entries(hdrs).map(([k,v])=>`  -H '${k}: ${v}' \\`).join('\n');
+    s=`curl -X ${ep.method} '${url}' \\\n${hStr}\n  --max-time 30`;
+  } else if(type==='fetch'){
+    s=`const response = await fetch('${url}', {\n  method: '${ep.method}',\n  headers: ${JSON.stringify(hdrs,null,4)}\n});\nconst data = await response.json();\nconsole.log(data);`;
+  } else if(type==='axios'){
+    s=`import axios from 'axios';\n\nconst { data } = await axios.${ep.method.toLowerCase()}('${url}', {\n  headers: ${JSON.stringify(hdrs,null,4)}\n});\nconsole.log(data);`;
+  } else if(type==='python'){
+    const hPy=Object.entries(hdrs).map(([k,v])=>`    '${k}': '${v}'`).join(',\n');
+    s=`import requests\n\nresponse = requests.${ep.method.toLowerCase()}(\n    '${url}',\n    headers={\n${hPy}\n    }\n)\nprint(response.json())`;
+  } else if(type==='php'){
+    s=`<?php\n$ch = curl_init();\ncurl_setopt($ch, CURLOPT_URL, '${url}');\ncurl_setopt($ch, CURLOPT_CUSTOMREQUEST, '${ep.method}');\ncurl_setopt($ch, CURLOPT_RETURNTRANSFER, true);\n$response = curl_exec($ch);\ncurl_close($ch);\n$data = json_decode($response, true);\nprint_r($data);`;
+  }
+  copyText(s);toast(`${type} snippet copied!`,'ti-copy');
+}
+
+function copyText(text){navigator.clipboard.writeText(text).catch(()=>{const el=document.createElement('textarea');el.value=text;document.body.appendChild(el);el.select();document.execCommand('copy');el.remove();});}
+
+// ─── EXPORT / IMPORT ─────────────────────────────────────────────────────────
+function exportOpenAPI(){
+  const spec={openapi:'3.0.0',info:{title:'Mock API',version:'1.0.0'},servers:[{url:state.baseUrl}],paths:{}};
+  state.endpoints.forEach(ep=>{
+    if(!spec.paths[ep.path])spec.paths[ep.path]={};
+    const parameters=ep.params.filter(p=>p.in!=='body').map(p=>({name:p.name,in:p.in,required:p.required,schema:{type:p.type},description:''}));
+    const reqBody=ep.params.filter(p=>p.in==='body').length?{requestBody:{content:{[ep.contentType]:{schema:{type:'object'}}}}}:{};
+    spec.paths[ep.path][ep.method.toLowerCase()]={
+      summary:ep.description||ep.path,tags:ep.tags,parameters,
+      ...reqBody,
+      responses:{[ep.statusCode]:{description:getStatusText(ep.statusCode),content:{[ep.contentType]:{example:ep.responseBody}}}},
+      security:ep.authRequired?[{bearerAuth:[]}]:[]
+    };
+  });
+  if(state.endpoints.some(e=>e.authRequired))spec.components={securitySchemes:{bearerAuth:{type:'http',scheme:'bearer'}}};
+  downloadJSON(spec,'openapi-spec.json');
+  toast('OpenAPI 3.0 spec exported!','ti-file-code');
+}
+
+function exportHTML(){
+  // Self-contained export with inline mock SW
+  const specData=JSON.stringify(state);
+  const html=`<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>API Mock Server</title>
+<style>body{font-family:monospace;background:#0d0f14;color:#e8eaf0;padding:30px;max-width:700px;margin:0 auto}
+h1{color:#00d4a0;margin-bottom:20px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:#1e2330;padding:10px;text-align:left;border:1px solid #2a3040}
+td{padding:8px 10px;border:1px solid #2a3040}
+.m{padding:2px 6px;border-radius:3px;font-size:11px;font-weight:600}
+.GET{background:rgba(0,212,160,.15);color:#00d4a0}.POST{background:rgba(77,157,224,.15);color:#4d9de0}
+.PUT{background:rgba(255,201,71,.15);color:#ffc947}.DELETE{background:rgba(255,95,109,.15);color:#ff5f6d}
+.PATCH{background:rgba(176,108,255,.15);color:#b06cff}
+code{background:#1e2330;padding:2px 8px;border-radius:4px}</style></head>
+<body>
+<h1>⚡ API Mock Server</h1>
+<p style="color:#9aa3b8;margin-bottom:20px">Base URL: <code>${state.baseUrl}</code> — ${state.endpoints.length} endpoints</p>
+<table><thead><tr><th>Method</th><th>Path</th><th>Status</th><th>Description</th></tr></thead><tbody>
+${state.endpoints.map(ep=>`<tr><td><span class="m ${ep.method}">${ep.method}</span></td><td><code>${ep.path}</code></td><td>${ep.statusCode}</td><td>${ep.description||'—'}</td></tr>`).join('')}
+</tbody></table>
+<p style="margin-top:30px;color:#5a6480;font-size:12px">Generated by API Studio • ${new Date().toISOString()}</p>
+</body></html>`;
+  const a=document.createElement('a');a.href='data:text/html;charset=utf-8,'+encodeURIComponent(html);a.download='mock-server-docs.html';a.click();
+  toast('HTML docs exported!','ti-download');
+}
+
+function downloadJSON(data,filename){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+  a.download=filename;a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function importSpec(){document.getElementById('import-file').click();}
+function handleImport(e){
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const spec=JSON.parse(ev.target.result);
+      if(spec.paths){
+        let count=0;
+        Object.entries(spec.paths).forEach(([path,methods])=>{
+          Object.entries(methods).forEach(([method,def])=>{
+            if(!['get','post','put','patch','delete'].includes(method))return;
+            const ep=newEP(count++);
+            ep.path=path;ep.method=method.toUpperCase();
+            ep.description=def.summary||'';
+            ep.tags=def.tags||[];
+            const resp=def.responses&&def.responses[Object.keys(def.responses)[0]];
+            if(resp){
+              const sc=parseInt(Object.keys(def.responses)[0]);
+              if(!isNaN(sc))ep.statusCode=sc;
+            }
+            state.endpoints.push(ep);
+          });
+        });
+        if(spec.servers&&spec.servers[0])state.baseUrl=spec.servers[0].url;
+        state.selected=state.endpoints.length?state.endpoints[0].id:null;
+        render();toast(`Imported ${count} endpoints!`,'ti-upload');
+      }
+    }catch(err){toast('Invalid JSON file','ti-alert-circle');}
+  };
+  reader.readAsText(file);
+  e.target.value='';
+}
+
+function shareLink(){
+  try{
+    const encoded=btoa(JSON.stringify(state));
+    const url=window.location.origin+window.location.pathname+'?state='+encoded;
+    navigator.clipboard.writeText(url);
+    toast('Share link copied to clipboard!','ti-share');
+  }catch(e){toast('Share link too large — use Export instead','ti-alert-circle');}
+}
+
+// ─── CONFIG MODAL ─────────────────────────────────────────────────────────────
+function showConfigModal(){
+  document.getElementById('modal-root').innerHTML=`
+  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+    <div class="modal">
+      <div class="modal-hdr">Server Configuration <button class="icon-btn" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+      <div class="modal-body">
+        <div style="margin-bottom:14px">
+          <label>Base URL</label>
+          <input id="cfg-baseurl" value="${esc(state.baseUrl)}" placeholder="http://localhost:3000">
+          <div class="hint">Frontend code points to this URL. All endpoint paths are appended to it.</div>
+        </div>
+        <div style="background:var(--accent-bg);border:1px solid var(--accent-border);border-radius:var(--r);padding:10px 12px;font-size:11px;color:var(--accent)">
+          <i class="ti ti-info-circle" style="font-size:13px;vertical-align:-2px"></i>
+          Example: <code>https://myapp-api.vercel.app</code> or <code>http://192.168.1.10:8080</code>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveConfig()">Save</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function saveConfig(){
+  const v=document.getElementById('cfg-baseurl').value.trim();
+  if(v){state.baseUrl=v;document.getElementById('hdr-baseurl').textContent=v;}
+  closeModal();render();toast('Config saved','ti-check');
+}
+
+function showHelpModal(){
+  document.getElementById('modal-root').innerHTML=`
+  <div class="modal-bg" onclick="if(event.target===this)closeModal()">
+    <div class="modal" style="width:520px">
+      <div class="modal-hdr">API Studio — Help <button class="icon-btn" onclick="closeModal()"><i class="ti ti-x"></i></button></div>
+      <div class="modal-body" style="font-size:12px;line-height:1.8;color:var(--text2)">
+        <p style="color:var(--accent);font-weight:600;margin-bottom:8px">Dynamic Placeholders</p>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:16px;font-size:11px">
+          ${[['{{timestamp}}','Current ISO timestamp'],['{{uuid}}','Random UUID'],['{{faker.name}}','Random name'],['{{faker.email}}','Random email'],['{{faker.phone}}','Random phone'],['{{random.int}}','Random integer 0-999']].map(([k,v])=>`<tr><td style="padding:4px 8px"><code>${k}</code></td><td style="padding:4px 8px;color:var(--text3)">${v}</td></tr>`).join('')}
+        </table>
+        <p style="color:var(--accent);font-weight:600;margin-bottom:8px">Scenarios</p>
+        <p>Create multiple response states per endpoint (e.g. success, error, empty) and toggle between them with one click without editing the main body.</p>
+        <p style="color:var(--accent);font-weight:600;margin:12px 0 8px">Schema Validation</p>
+        <p>In the Schema tab, paste a JSON Schema. When you use Try It Out, the request body will be validated and errors shown before the mock response.</p>
+        <p style="color:var(--accent);font-weight:600;margin:12px 0 8px">Import</p>
+        <p>Import an existing OpenAPI 3.0 JSON file to auto-populate all endpoints.</p>
+      </div>
+      <div class="modal-foot"><button class="btn btn-primary" onclick="closeModal()">Got it</button></div>
+    </div>
+  </div>`;
+}
+
+function closeModal(){document.getElementById('modal-root').innerHTML='';}
+
+// ─── TOAST ────────────────────────────────────────────────────────────────────
+function toast(msg,icon='ti-check',type='ok'){
+  const r=document.getElementById('toast-root');
+  const el=document.createElement('div');
+  el.className=`toast toast-${type}`;
+  el.innerHTML=`<i class="ti ${icon}" style="font-size:14px"></i>${msg}`;
+  r.appendChild(el);
+  setTimeout(()=>el.style.opacity='0',2000);
+  setTimeout(()=>el.remove(),2300);
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+function init(){
+  // Check URL state param
+  try{
+    const u=new URLSearchParams(window.location.search);
+    if(u.has('state')){state={...state,...JSON.parse(atob(u.get('state')))};render();return;}
+  }catch(e){}
+
+  if(!load()){
+    // Seed with examples
+    const examples=[
+      {method:'GET',path:'/api/users',description:'List all users',statusCode:200,tags:['users'],
+       responseBody:JSON.stringify({success:true,data:[{id:1,name:"{{faker.name}}",email:"{{faker.email}}"},{id:2,name:"{{faker.name}}",email:"{{faker.email}}"}],total:2,timestamp:"{{timestamp}}"},null,2),
+       params:[{name:'limit',in:'query',type:'integer',required:false,default:'20'},{name:'offset',in:'query',type:'integer',required:false,default:'0'}]},
+      {method:'POST',path:'/api/users',description:'Create user',statusCode:201,tags:['users'],
+       responseBody:JSON.stringify({success:true,data:{id:"{{random.int}}",name:"{{faker.name}}",email:"{{faker.email}}",createdAt:"{{timestamp}}"},message:"User created successfully"},null,2),
+       requestSchema:JSON.stringify({type:'object',required:['name','email'],properties:{name:{type:'string'},email:{type:'string',format:'email'},role:{type:'string'}}},null,2)},
+      {method:'GET',path:'/api/users/:id',description:'Get user by ID',statusCode:200,tags:['users'],
+       responseBody:JSON.stringify({id:"{{random.int}}",name:"{{faker.name}}",email:"{{faker.email}}",role:"admin",phone:"{{faker.phone}}",createdAt:"{{timestamp}}"},null,2),
+       params:[{name:'id',in:'path',type:'integer',required:true,default:''}]},
+      {method:'PUT',path:'/api/users/:id',description:'Update user',statusCode:200,tags:['users'],
+       responseBody:JSON.stringify({success:true,message:"User updated",data:{id:"{{random.int}}",updatedAt:"{{timestamp}}"}},null,2)},
+      {method:'DELETE',path:'/api/users/:id',description:'Delete user',statusCode:204,tags:['users'],
+       responseBody:''},
+      {method:'POST',path:'/api/auth/login',description:'Login endpoint',statusCode:200,tags:['auth'],
+       responseBody:JSON.stringify({token:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example","expiresIn":3600,user:{id:"{{random.int}}",email:"{{faker.email}}"}},null,2),
+       scenarios:[{id:crypto.randomUUID(),name:'Invalid credentials',statusCode:401,body:JSON.stringify({success:false,error:"Invalid email or password"},null,2)}]},
+    ];
+    examples.forEach((ex,i)=>{
+      const ep={...newEP(i),...ex,id:crypto.randomUUID()};
+      if(!ep.headers)ep.headers=[{key:'Content-Type',value:'application/json'},{key:'Access-Control-Allow-Origin',value:'*'}];
+      if(!ep.params)ep.params=[];
+      if(!ep.scenarios)ep.scenarios=[];
+      state.endpoints.push(ep);
+    });
+    state.selected=state.endpoints[0].id;
+  }
+  render();
+}
+
+init();
+</script>
+</body>
+</html>
