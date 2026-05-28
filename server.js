@@ -13,6 +13,11 @@ const JWT_SECRET = process.env.JWT_SECRET || 'mock-api-secret-key';
 // In-memory store for UI-configured endpoints
 let mockEndpoints = [];
 
+// Serve API Studio UI — must be before json-server middlewares
+server.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
 server.use(middlewares);
 server.use(jsonServer.bodyParser);
 
