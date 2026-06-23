@@ -823,34 +823,146 @@ function downloadJSON(data,filename){
 }
 
 function importSpec(){document.getElementById('import-file').click();}
+
+// Resolve a local $ref like "#/components/responses/Unauthorised" against the spec
+function resolveRef(spec,ref){
+  if(typeof ref!=='string'||!ref.startsWith('#/'))return null;
+  return ref.slice(2).split('/').reduce((o,k)=>{
+    if(!o)return null;
+    k=k.replace(/~1/g,'/').replace(/~0/g,'~'); // JSON-pointer unescape
+    return o[k];
+  },spec);
+}
+// Follow a $ref one level (objects that are {"$ref": "..."})
+function deref(spec,obj){
+  let guard=0;
+  while(obj&&obj.$ref&&guard++<20)obj=resolveRef(spec,obj.$ref);
+  return obj||{};
+}
+// Pull the first concrete example out of a response/requestBody content map
+function exampleFromContent(spec,content){
+  if(!content)return null;
+  const mediaType=Object.keys(content)[0];
+  if(!mediaType)return null;
+  const media=content[mediaType]||{};
+  let value=null;
+  if('example'in media){value=media.example;}
+  else if(media.examples&&Object.keys(media.examples).length){
+    const first=deref(spec,media.examples[Object.keys(media.examples)[0]]);
+    value=first&&'value'in first?first.value:first;
+  }else if(media.schema){
+    const sch=deref(spec,media.schema);
+    if('example'in sch)value=sch.example;
+  }
+  return {mediaType,value};
+}
+function toBody(value){
+  if(value==null)return '';
+  return typeof value==='string'?value:JSON.stringify(value,null,2);
+}
+
 function handleImport(e){
   const file=e.target.files[0];if(!file)return;
   const reader=new FileReader();
   reader.onload=ev=>{
     try{
       const spec=JSON.parse(ev.target.result);
-      if(spec.paths){
-        let count=0;
-        Object.entries(spec.paths).forEach(([path,methods])=>{
-          Object.entries(methods).forEach(([method,def])=>{
-            if(!['get','post','put','patch','delete'].includes(method))return;
-            const ep=newEP(count++);
-            ep.path=path;ep.method=method.toUpperCase();
-            ep.description=def.summary||'';
-            ep.tags=def.tags||[];
-            const resp=def.responses&&def.responses[Object.keys(def.responses)[0]];
-            if(resp){
-              const sc=parseInt(Object.keys(def.responses)[0]);
-              if(!isNaN(sc))ep.statusCode=sc;
-            }
-            state.endpoints.push(ep);
+      if(!spec.paths){toast('No paths found in spec','ti-alert-circle');return;}
+      let count=0;
+      Object.entries(spec.paths).forEach(([path,methods])=>{
+        // shared (path-level) parameters apply to every operation
+        const sharedParams=Array.isArray(methods.parameters)?methods.parameters:[];
+        Object.entries(methods).forEach(([method,rawDef])=>{
+          if(!['get','post','put','patch','delete'].includes(method))return;
+          const def=deref(spec,rawDef);
+          const ep=newEP(count++);
+          // OpenAPI {param} → Express :param so the server's matcher hits it
+          ep.path=path.replace(/\{([^}]+)\}/g,':$1');
+          ep.method=method.toUpperCase();
+          ep.description=def.summary||def.description||'';
+          ep.tags=def.tags||[];
+          ep.notes=def.summary&&def.description?def.description:'';
+          if(def.deprecated)ep.tags=[...ep.tags,'deprecated'];
+
+          // ── Parameters (path / query / header) ──
+          const allParams=[...sharedParams,...(def.parameters||[])].map(p=>deref(spec,p));
+          ep.params=allParams.map(p=>{
+            const sch=deref(spec,p.schema||{});
+            return {
+              name:p.name||'',
+              in:['path','query','header','body'].includes(p.in)?p.in:'query',
+              type:sch.type||'string',
+              default:p.example!=null?String(p.example):(sch.default!=null?String(sch.default):''),
+              required:!!p.required
+            };
           });
+
+          // ── Request body → schema tab + a body param ──
+          const reqBody=def.requestBody?deref(spec,def.requestBody):null;
+          if(reqBody&&reqBody.content){
+            const rbType=Object.keys(reqBody.content)[0];
+            const rbMedia=reqBody.content[rbType]||{};
+            if(rbMedia.schema){
+              const sch=deref(spec,rbMedia.schema);
+              try{ep.requestSchema=JSON.stringify(sch,null,2);}catch{}
+            }
+            ep.params.push({name:'body',in:'body',type:'object',default:'',required:!!reqBody.required});
+          }
+
+          // ── Responses: success → main body, others/extra examples → scenarios ──
+          const respEntries=Object.entries(def.responses||{});
+          const codes=respEntries.map(([c])=>c);
+          const successCode=codes.find(c=>/^2\d\d$/.test(c))||codes[0];
+          ep.scenarios=[];
+          respEntries.forEach(([code,rawResp])=>{
+            const resp=deref(spec,rawResp);
+            const content=resp.content||{};
+            const mediaType=Object.keys(content)[0];
+            const media=mediaType?content[mediaType]:null;
+
+            // collect every named example (or the single example) for this code
+            const variants=[];
+            if(media){
+              if('example'in media)variants.push({name:'',value:media.example});
+              else if(media.examples)Object.entries(media.examples).forEach(([n,exRaw])=>{
+                const ex=deref(spec,exRaw);
+                variants.push({name:ex.summary||n,value:'value'in ex?ex.value:ex});
+              });
+              else{const ex=exampleFromContent(spec,content);if(ex&&ex.value!=null)variants.push({name:'',value:ex.value});}
+            }
+
+            if(code===successCode){
+              const sc=parseInt(code);if(!isNaN(sc))ep.statusCode=sc;
+              if(mediaType)ep.contentType=mediaType;
+              // first variant becomes the default response body
+              if(variants.length)ep.responseBody=toBody(variants[0].value);
+              // remaining named variants become scenarios
+              variants.slice(1).forEach(v=>ep.scenarios.push({
+                id:crypto.randomUUID(),name:v.name||`${code} variant`,statusCode:sc,body:toBody(v.value)
+              }));
+            }else{
+              const sc=parseInt(code)||500;
+              if(variants.length){
+                variants.forEach(v=>ep.scenarios.push({
+                  id:crypto.randomUUID(),name:v.name||resp.description||`${code} response`,statusCode:sc,body:toBody(v.value)
+                }));
+              }else if(resp.description){
+                ep.scenarios.push({id:crypto.randomUUID(),name:resp.description,statusCode:sc,
+                  body:toBody({success:false,statusCode:sc,message:resp.description})});
+              }
+            }
+          });
+
+          // ── Auth / security ──
+          ep.authRequired=Array.isArray(def.security)?def.security.length>0:!!(spec.security&&spec.security.length);
+
+          state.endpoints.push(ep);
         });
-        if(spec.servers&&spec.servers[0])state.baseUrl=spec.servers[0].url;
-        state.selected=state.endpoints.length?state.endpoints[0].id:null;
-        render();toast(`Imported ${count} endpoints!`,'ti-upload');
-      }
-    }catch(err){toast('Invalid JSON file','ti-alert-circle');}
+      });
+      if(spec.servers&&spec.servers[0]&&spec.servers[0].url)state.baseUrl=spec.servers[0].url;
+      state.selected=state.endpoints.length?state.endpoints[state.endpoints.length-count].id:null;
+      render();toast(`Imported ${count} endpoints with full data!`,'ti-upload');
+    }catch(err){console.error(err);toast('Invalid JSON file','ti-alert-circle');}
   };
   reader.readAsText(file);
   e.target.value='';
