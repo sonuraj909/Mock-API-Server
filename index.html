@@ -263,6 +263,7 @@ const newEP = (n=0) => ({
   params: [],
   scenarios: [],
   activeScenario: null,
+  requestBody: '',
   requestSchema: '',
   notes: ''
 });
@@ -400,11 +401,14 @@ function renderMain() {
     <div class="card-hdr"><i class="ti ti-code"></i> Response Configuration</div>
     <div class="card-body">
       <div class="tabs">
-        ${['response','scenarios','headers','params','schema','notes'].map(t=>`
+        ${(['POST','PUT','PATCH'].includes(ep.method)
+            ?['response','request','scenarios','headers','params','schema','notes']
+            :['response','scenarios','headers','params','schema','notes']).map(t=>`
           <button class="tab-btn ${state.tab===t?'active':''}" onclick="setTab('${t}')">
             ${t==='headers'?'Headers<span class="tab-count">'+ep.headers.length+'</span>':
               t==='params'?'Params<span class="tab-count">'+ep.params.length+'</span>':
               t==='scenarios'?'Scenarios<span class="tab-count">'+ep.scenarios.length+'</span>':
+              t==='request'?'Request Body':
               t.charAt(0).toUpperCase()+t.slice(1)}
           </button>
         `).join('')}
@@ -431,7 +435,7 @@ function renderMain() {
         ${['POST','PUT','PATCH'].includes(ep.method)?`
         <div style="margin-bottom:10px">
           <label>Request Body (JSON)</label>
-          <textarea id="try-body" style="min-height:80px" placeholder='{"field": "value"}'></textarea>
+          <textarea id="try-body" style="min-height:80px" placeholder='{"field": "value"}'>${esc(ep.requestBody||'')}</textarea>
         </div>
         `:''}
         <div id="query-params-area" style="margin-bottom:10px">
@@ -467,6 +471,14 @@ function renderMain() {
 
 function renderTab(ep) {
   const t = state.tab;
+  if (t === 'request') return `
+    <div>
+      <label>Request Body (example payload)</label>
+      <textarea oninput="updateEP('requestBody',this.value)" placeholder='{"field": "value"}'>${esc(ep.requestBody||'')}</textarea>
+      <div class="hint">The example request payload from the spec. Used to prefill the body in <b>Try It Out</b>.</div>
+    </div>
+    ${ep.requestBody?`<div style="margin-top:12px"><label>Preview</label><div class="code-block"><pre>${syntaxHL(ep.requestBody)}</pre></div></div>`:''}
+  `;
   if (t === 'response') return `
     <div>
       <label>Response Body</label>
@@ -906,6 +918,9 @@ function handleImport(e){
               const sch=deref(spec,rbMedia.schema);
               try{ep.requestSchema=JSON.stringify(sch,null,2);}catch{}
             }
+            // actual example payload → Request Body tab + Try It prefill
+            const rbEx=exampleFromContent(spec,reqBody.content);
+            if(rbEx&&rbEx.value!=null)ep.requestBody=toBody(rbEx.value);
             ep.params.push({name:'body',in:'body',type:'object',default:'',required:!!reqBody.required});
           }
 
